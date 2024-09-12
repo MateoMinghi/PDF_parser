@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF</title>
+
+</head>
+<body>
+    <h1>Ejemplo de uso PDF.js</h1>
+    <input type="file" id="pdf-file" accept="application/pdf">
+
+    <form id="data-form">
+        <label for="razon_social">Razón Social:</label>
+        <input type="text" id="razon_social" name="razon_social" required>
+        
+        <label for="direccion_fiscal">Dirección Fiscal:</label>
+        <input type="text" id="direccion_fiscal" name="direccion_fiscal" required>
+        
+        <label for="cp_fiscal">C.P. Fiscal:</label>
+        <input type="text" id="cp_fiscal" name="cp_fiscal" required>
+        
+        <label for="rfc">R.F.C.</label>
+        <input type="text" id="rfc" name="rfc" required>
+        
+        <label for="regimen_id">Regimen:</label>
+        <input type="text" id="regimen_id" name="regimen_id" required>
+        
+        <label for="uso_cfdi">Uso del CFDi:</label>
+        <input type="text" id="uso_cfdi" name="uso_cfdi" required>
+    </form>
+    
+    <script type="module">
+        import * as pdfjsLib from './pdf.mjs';
+    
+        pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.mjs';
+    
+        function extractRelevantInfo(text) {
+            const info = {};
+            
+            const razonSocialMatch = text.match(/Denominación\/Razón Social:\s*([A-Z\s]+)(?=\s*Régimen Capital:)/);
+            if (razonSocialMatch) info.razon_social = razonSocialMatch[1].trim();
+
+            const domicilioMatch = text.match(/Nombre de Vialidad:\s*(.+?)\s*Número Exterior:\s*(\d+)\s*Número Interior:\s*(.*?)\s*Nombre de la Colonia:\s*([\w\s]+?)\s*Nombre de la Localidad:\s*.*?Nombre del Municipio o Demarcación Territorial:\s*(.+?)\s*Nombre de la Entidad Federativa:\s*(.+?)(?=\s*Entre Calle:)/);
+            //Nombre de vidalidad + Num exterior, Num interior, Nombre Colonia,
+            //Nombre municipio, Nombre entidad 
+            
+            if (domicilioMatch) {
+                info.domicilio = `${domicilioMatch[1]} ${domicilioMatch[2]}`;
+                if (domicilioMatch[3].trim()) info.domicilio += `, Int. ${domicilioMatch[3].trim()}`;
+                info.domicilio += `, ${domicilioMatch[4]}, ${domicilioMatch[5]}, ${domicilioMatch[6]}`;
+            } 
+            
+            const cpFiscalMatch = text.match(/Código Postal:\s*(\d+)/);
+            if (cpFiscalMatch) info.cp_fiscal = cpFiscalMatch[1];
+            
+            const rfcMatch = text.match(/RFC:\s*(\w+)/);
+            if (rfcMatch) info.rfc = rfcMatch[1];
+            
+            return info;
+        }
+    
+        function fillForm(info) {
+            document.getElementById('razon_social').value = info.razon_social || '';
+            document.getElementById('direccion_fiscal').value = info.domicilio || '';
+            document.getElementById('cp_fiscal').value = info.cp_fiscal || '';
+            document.getElementById('rfc').value = info.rfc || '';
+            document.getElementById('regimen_id').value = info.regimen_id || '';
+            document.getElementById('uso_cfdi').value = info.uso_cfdi || '';
+        }
+    
+    
+        document.getElementById('pdf-file').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+    
+            if (file && file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+    
+                fileReader.onload = function() {
+                    const typedArray = new Uint8Array(this.result);
+    
+                    pdfjsLib.getDocument(typedArray).promise.then(pdf => {
+                        //console.log('PDF loaded');
+                        
+                        let totalText = '';
+                        const totalPages = pdf.numPages;
+                        const pagePromises = [];
+    
+                        for (let i = 1; i <= totalPages; i++) {
+                            pagePromises.push(
+                                pdf.getPage(i).then(page => {
+                                    return page.getTextContent().then(textContent => {
+                                        return textContent.items.map(item => item.str).join(' ');
+                                    });
+                                })
+                            );
+                        }
+    
+                        Promise.all(pagePromises).then(pagesText => {
+                            totalText = pagesText.join(' ');
+                            //console.log('Extracted text from all pages:', totalText); 
+                            //esta línea es útil para debuggear
+                            
+                            const relevantInfo = extractRelevantInfo(totalText);
+                            //console.log('Relevant information:', relevantInfo);
+                            
+                            fillForm(relevantInfo);
+                        });
+                    })
+                };
+    
+                fileReader.readAsArrayBuffer(file);
+            } 
+        });
+    </script>
+</body>
+</html>
