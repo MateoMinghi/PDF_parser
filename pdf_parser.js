@@ -16,7 +16,8 @@ document.getElementById('pdf-file').addEventListener('change', function(event) {
                         let totalText = '';
                         const totalPages = pdf.numPages;
                         const pagePromises = [];
-    
+
+                        //loop to parse all pages
                         for (let i = 1; i <= totalPages; i++) {
                             pagePromises.push(
                                 pdf.getPage(i).then(page => {
@@ -33,7 +34,7 @@ document.getElementById('pdf-file').addEventListener('change', function(event) {
                             
                             
                             const relevantInfo = extractRelevantInfo(totalText);
-                            //console.log('Relevant information:', relevantInfo);
+
                             
                             fillForm(relevantInfo);
                         });
